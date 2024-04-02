@@ -13,3 +13,9 @@ Edit segatools.ini to change the server URL and the keychip ID. (The file gets a
 Edit AMCUS\AMConfig.ini and change the server URL.
 Edit app\DEVICE\banapass.txt to your banapass ID.
 Use Launch.bat to start the game.
+
+---
+
+Development:
+
+Same as installation, but also add synchook.dll/inject.exe to both AMCUS and app folders.
