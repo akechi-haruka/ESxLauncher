@@ -20,6 +20,15 @@ Misc. Notes:
 
 * is_holiday.xtal was edited so the game doesn't crash outside of 2018
 * self_check.xtal was edited so the game doesn't attempt to ping a hardcoded store router address causing a network error (game still works, however an ugly "NETWORK ERROR" message is displayed on the bottom.
+* To change side for multiplayer, edit "side" to L/R in segatools.ini
+
+Default keybindings:
+* Touchscreen: Everything
+* 1: TEST
+* 2: SERVICE
+* 3: COIN / Test Menu ENTER
+* 4: Test Menu Up
+* 5: Test Menu Down
 
 ---
 
