@@ -16,6 +16,11 @@ Use Launch.bat to start the game.
 
 If you crash with "[ERROR] (network::local_network::initialize) initialize error: bind", run "net stop winnat" as admin.
 
+Misc. Notes:
+
+* is_holiday.xtal was edited so the game doesn't crash outside of 2018
+* self_check.xtal was edited so the game doesn't attempt to ping a hardcoded store router address causing a network error (game still works, however an ugly "NETWORK ERROR" message is displayed on the bottom.
+
 ---
 
 Development:
