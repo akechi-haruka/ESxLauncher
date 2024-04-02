@@ -23,7 +23,7 @@ Misc. Notes:
 * To change side for multiplayer, edit "side" to L/R in segatools.ini
 
 Default keybindings:
-* Touchscreen: Everything
+* Touchscreen: Everything (WinTouch is a requirement!)
 * Backspace: Scan Card
 * 1: TEST
 * 2: SERVICE
