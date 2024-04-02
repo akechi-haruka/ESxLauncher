@@ -1,0 +1,743 @@
+// -*- mode: xtal; coding: utf-8 -*-
+
+touch_panel_refresh: load("touch_panel_refresh.xtal");
+player_unlock_reserve_cls: load("../common/player_unlock_reserve.xtal");
+serial_unmodify_reserve_cls: load("../common/serial_unmodify_reserve.xtal");
+server_contents_getter: load("../common/server_contents_getter.xtal");
+error_log_uploader: load("../common/error_log_uploader.xtal");
+    
+/// プレイ途中でフリーズなどした場合のカードのアンロック対応や，
+/// シリアルコードの使用権の復旧等を行う
+recovery_request_process: class (lib::stand_alone_object) {
+    // xtal のクラス参照バグの対策(念の為)
+    _avoid_xtal_bug__cls_cache: [
+        filelocal::player_unlock_reserve_cls,
+        filelocal::serial_unmodify_reserve_cls,
+        this.get_class(),
+        ];
+
+    _unlocker_class_list: [];
+    _unlocker: null;
+
+    start: method() {
+        _unlocker_class_list = [
+            filelocal::player_unlock_reserve_cls,
+            filelocal::serial_unmodify_reserve_cls,
+            ];
+        next();
+    }
+
+    - next: method() {
+        if (_unlocker_class_list.empty()) {
+            this.destroy();
+        }
+        else {
+            cls: _unlocker_class_list.back();
+            _unlocker = cls();
+            _unlocker_class_list.pop_back();
+            _unlocker.recovery_start(fun() {
+                this.next();
+            });
+        }
+    }
+    
+    update: method() {
+        _unlocker.?update();
+    }
+}
+
+
+blink: class (lib::game_object_component) {
+    + _color: [];
+    _index: 0;
+    _counter: 0;
+    
+    update: method() {
+        ++_counter;
+        if (_counter > 30) {
+            _counter = 0;
+            _index = 1 - _index;
+            c: _color[_index];
+            this.owner.renderer.set_foreground_color(c[0], c[1], c[2], c[3]);
+        }
+    }
+}
+
+check_info_obj: class{
+    + STATE_CHECKING:   0;
+    + STATE_OK:         1;
+    + STATE_NG:         2;
+    + STATE_HIDE_MSG:   3;
+
+    + COLOR_WHITE:    [1, 1, 1, 1];
+    + COLOR_OK:       [0, 1, 0, 1];
+    + COLOR_NG:       [1, 0, 0, 1];
+    + COLOR_CHECK:    [0, 1, 1, 1];
+    + COLOR_WARNING:  [1, 1, 0, 1];
+    + COLOR_TITLE:    [1, 1, 1, 1];
+
+    _obj_menu: null;
+    _obj_msg: null;
+    
+    _state: STATE_CHECKING;
+
+    initialize: method(text_menu, pos_menu, pos_msg) {
+        _obj_menu = lib::game_object();
+        _obj_menu.renderer = lib::font_renderer();
+        _obj_menu.pos = pos_menu;
+        _obj_menu.renderer.message = text_menu;
+        _obj_menu.renderer.set_foreground_color(COLOR_TITLE[0], COLOR_TITLE[1], COLOR_TITLE[2], COLOR_TITLE[3]);
+
+        _obj_msg = lib::game_object();
+        _obj_msg.renderer = lib::font_renderer();
+        _obj_msg.pos = pos_msg;
+        set_state(STATE_CHECKING);
+    }
+    
+    set_state: method(state) {
+        switch(state){
+            case (STATE_CHECKING)   { set_msg("CHECKING", COLOR_CHECK); }
+            case (STATE_OK)         { set_msg("OK", COLOR_OK); }
+            case (STATE_NG)         { set_msg("NG", COLOR_NG); }
+            default                 { set_msg("", COLOR_TITLE); }
+        }
+        _state = state;
+    }
+    state: method() {
+        return _state;
+    }
+
+    set_msg: method(text_msg, color_msg, pos_msg:null) {
+        if (_obj_msg) {
+            _obj_msg.renderer.message = text_msg;
+            _obj_msg.renderer.set_foreground_color(color_msg[0], color_msg[1], color_msg[2], color_msg[3]);
+            if (pos_msg) {
+                _obj_msg.pos = pos_msg;
+            }
+        }
+    }
+}
+
+check_info_cls: class{
+    +POS_OFS_MSG:    26*18/2;
+    +POS_INTER_Y:    30;
+
+    + VERSION:       0;
+    + DONGLE:        1;
+    + CLOCK:         2;
+    + JVIO:          3;
+    + CARD:          4;
+    + SOUND:         5;
+    + CABLE:         6;
+    + ROUTER:        7;
+    + LAN:           8;
+    + ALLNET:        9;
+    + UPDATER:      10;
+    + GS:           11;
+    + CARD_SERVER:  12;
+    + LAST_AUTH:    13;
+    + FIRST_AUTH:   14;
+    + STID:         15;
+    + STID_UNIQUE:  16;
+    + STID_1L:      17;
+    + VERSION_VAL:  18; // Y座標いじるので最後に追加
+    + ITEM_END:     19;
+
+    + _datas: [];
+
+    initialize: method(pos) {
+        msg_x: pos[0] + POS_OFS_MSG;
+        pos_y: pos[1];
+        pos_menu: [pos[0],pos[1],pos[2]];
+        pos_msg: [pos[0]+POS_OFS_MSG,pos[1],pos[2]];
+
+        // ここの文言は見直す必要がある
+        texts: ["SOFTWARE VERSION ........",
+                "S/N .....................",
+                "CLOCK ...................",
+                "I/O BOARD ...............",
+                "CARD READER .............",
+                "SOUND DEVICE ............",
+                "NETWORK CABLE ...........",
+                "CONTENTS ROUTER .........",
+                "LOCAL NETWORK ...........",
+                "ALL.NET SERVER AUTH......",
+                "UPDATE SERVER AUTH.......",
+                "GAME SERVER .............",
+                "CARD SERVER .............",
+                "LAST AUTH ...............",
+                "FIRST AUTH ..............",
+                "STATION ID ..............",
+                "UNIQUE STATION ID .......",
+                "EXIST STATION ID 1L .....",
+                ""
+                ];
+        texts {
+            _datas.push_back(check_info_obj(it, pos_menu, pos_msg));
+            pos_menu[1] += POS_INTER_Y;
+            pos_msg[1] += POS_INTER_Y;
+        }
+    }
+
+    // ステータス指定
+    set_state: method(index, state) {
+        if(_datas && index >= 0 && index < ITEM_END) {
+            _datas[index].set_state(state);
+        }
+    }
+    // テキスト直指定
+    set_msg: method(index, text, color:check_info_obj::STATE_OK, pos:null) {
+        if(_datas && index >= 0 && index < ITEM_END) {
+            _datas[index].set_state(check_info_obj::STATE_OK);  // メッセージ直指定するものは OK 扱いにする
+            _datas[index].set_msg(text, color, pos);
+        }
+    }
+    
+    set_version: method(text) {
+    }
+    
+    is_checked: method() {
+        if(!_datas) {
+            return true;
+        }
+        _datas {
+            if(it.state() == check_info_obj::STATE_CHECKING) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+return class (scene::entry_point) {
+    SHORT_NAME: "B1";
+    + _next_scene:  "";
+    + _is_boot:     false;
+
+    STATE_INIT:     0;
+    STATE_CHECKING: 1;
+    STATE_WAIT:     2;
+    STATE_TOUCH_PANEL_REFRESH: 3;
+    STATE_END:      4;
+    STATE_DEBUG_INIT_MACHINE_SETTING: 10;
+
+    AUTH_STATE_INIT:                0;  // 最終認証のチェック開始
+    AUTH_STATE_WAIT:                1;  // 最終認証のチェック実行待ち
+    AUTH_STATE_OK:                  2;  // 最終認証チェック完了
+    AUTH_STATE_OFFLINE_OK:          -1; // オフライン稼働してOK
+    AUTH_STATE_ERROR:               -2; // エラー（クリティカルorテストモード待機はエラーコードで）
+
+    GS_STATE_WAIT_AUTH:             0;  // 最終認証待ち
+    GS_STATE_WAIT:                  1;  // heart_beat結果待ち
+    GS_STATE_END:                   2;  // チェック終了
+
+    INFO_POS:[200,100,0];               // 各アイテムの表示位置
+
+    _state: STATE_INIT;
+    _wait_count:    5*60;
+    _info: null;
+    _stid_checker: null;
+
+    _text_state: null;
+    _com_state: null;
+
+    _state_auth: AUTH_STATE_INIT;
+    _state_gs: GS_STATE_WAIT_AUTH;
+    _bk_sender: null;
+    _ping_client: null;
+    _is_cable_ok: true;
+
+    _setup_sound_count: 4;
+
+    _touch_refresh: null;
+
+    _server_contents: null;
+    
+    initialize: method() {
+        "self_check::initialize.".p;
+    }
+
+    on_enter_scene: method() {
+        %f"self_check::on_enter_scene. next:%s, is_boot:%s"(_next_scene, _is_boot).p;
+
+        // 終わるまでは遷移しない
+        global::testmode_watcher.set_available(false);
+        error_manager.disallow_abort_check();
+
+        // セルフチェック有効か
+        if (app_config.self_check.enable) {
+            "do self check.".p;
+            _state = STATE_INIT;
+        }
+        else if (app_config.auth.use_dummy_auth) {
+            /// 所属店舗変更画面のチェック用にダミーの店舗名を入れておく
+            machine_setting.shop_name = "未来研開発002";
+                
+            /// 開発環境でも曲 BIT 情報だけは取得しておきたい
+            _server_contents = server_contents_getter();
+            _server_contents.start(fun() {
+                _state = STATE_END;
+            });
+            _state = STATE_DEBUG_INIT_MACHINE_SETTING;
+        }
+        else {
+            "skip self check.".p;
+            _state = STATE_END;
+        }
+
+        // 処理が終われば自動的に自殺する
+        global::recovery_request_process: recovery_request_process();
+        global::recovery_request_process.start();
+    }
+
+    - is_event_id_enabled: method(id) {
+        machine_setting.event_now_id {
+            if (it == global::common::event_id::(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    on_exit_scene: method() {
+        if (app_config.debug.enable_error_log_upload) {
+            // GS とは別なのでハートビート結果は参照しない
+            is_online: !global::banapass_chk.is_offline() &&
+                !global::banapass_chk.is_unusable_time();
+            if (is_online) {
+                // 念の為イベントIDで機能を無効化できるようにしておく
+                if (is_event_id_enabled("DEV_ENABLE_DEBUG_LOG_UPLOAD")) {
+                    // 処理が終われば自動的に自殺する
+                    global::error_log_uploader: error_log_uploader();
+                }
+            }
+        }
+        
+        system_core.script_error_notify_enabled = true;
+        // 通常はありえないけど，天下一モードにしたまま店舗移設して
+        // AOU 非加盟店になるとテストモードで戻せなくなるので，
+        // 設定をリセットする処理を入れておく
+        // (本当は game_setting_impl::load 内の補正処理に書きたかったけど，
+        //  AOU 店舗かどうかの判定に特定の曲 BIT を参照しているので，
+        //  GS からの情報取得が完了するタイミングまで待たないといけない)
+        if (!system_core.is_aou_member_shop) {
+            game_setting.clear_event_cup_mode();
+        }
+        global::jv_manager.unlock_coin_slot();
+    }
+
+    is_ready: method() {
+        return _state == STATE_END;
+    }
+    
+    update: method() {
+        if (is_ready()) {
+            // テストモード移行可
+            global::testmode_watcher.set_available(true);
+            // エラー画面への遷移チェック許可
+            if (app_config.debug.enable_abort_check_on_error) {
+                error_manager.allow_abort_check();
+            }
+            // サウンドのセットアップをしていない場合はここで
+            if(_setup_sound_count > 0){
+                setup_sound();
+            }
+
+            // [NOTE] 主に開発環境のために起動直後にもフラグ更新処理を入れておく
+            event_flags: load("../common/event/event_flags.xtal")();
+            event_flags.setup_global_flags();
+            // [rev2.33] ナムコ店舗の場合イベント ID 依存で曲 BIT を書き換えるので
+            // オフラインになっても大丈夫なように保存しなおしておく
+            machine_setting.save();
+
+            startup: "";
+            if (app_config.debug.enable_dev_menu) {
+                startup = "dev_menu";
+            }
+            else {
+                startup = app_config.config.startup;
+            }
+            next: scene::create(_next_scene);
+            scene::change(next);
+            scene::destroy(this.name);
+        }
+        else {
+            update_main();
+        }
+
+        // 少し待ってから音量を反映（テストモード → アトラクト）
+        if(_setup_sound_count > 0){
+            --_setup_sound_count;
+            if(_setup_sound_count == 0){
+                setup_sound();
+            }
+        }
+    }
+    set_version: method() {
+        // revision.txt の先頭からLFまでを、はじめは白で後ろ3文字は黄色で表示する
+        str_version:"";
+        FileStream("../../version/revision.txt", "r")
+        {
+            str_version = it.get_s_all();
+        }
+
+        // 検索して見つかった場所を取得したり先頭からindexまでの文字列をいい感じに取得したいのだが…
+        str_version_body:"";
+        str_version_val:"";
+        body_size:0;
+        str_version.with_index{ |index, ch|
+            if(ch == "\r" || ch == "\n"){
+                body_size = index;
+                break;
+            }
+        }
+        if(body_size>0){
+            str_version.with_index{ |index, ch|
+                if(index<body_size-3){
+                    str_version_body = str_version_body.cat(ch);
+                }else if(index<body_size){
+                    str_version_val = str_version_val.cat(ch);
+                }
+            }
+        }
+        // 表示設定
+        _info.set_msg(check_info_cls::VERSION, str_version_body, check_info_obj::COLOR_WHITE);
+        pos:INFO_POS;
+        pos[0] += check_info_cls::POS_OFS_MSG + str_version_body.length()*18/2;
+        _info.set_msg(check_info_cls::VERSION_VAL, str_version_val, check_info_obj::COLOR_WARNING, pos);
+    }
+    
+    update_main: method() {
+        if(_stid_checker){
+            _stid_checker.update();
+        }
+        switch (_state) {
+            case (STATE_INIT) {
+                _info = check_info_cls(INFO_POS);
+
+                // 進行状況表示
+                _text_state = lib::game_object();
+                _text_state.renderer = lib::font_renderer();
+                _text_state.pos = [200,60,0];
+                _text_state.renderer.message = "CHECKING SYSTEM...";
+                _com_state = _text_state.add_component(blink);
+                _com_state.color.push_back([1, 1, 1, 1]);
+                _com_state.color.push_back([0, 0, 0, 1]);
+
+                _state = STATE_CHECKING;
+
+                // 即表示できる系
+
+                // version.txtを読んで表示するメッセージをセット
+                set_version();
+
+                // ドングル
+                serial: system_core.dongle_serial_string();
+                if (serial.length () > 0) {
+                    _info.set_msg(check_info_cls::DONGLE, serial, check_info_obj::COLOR_WHITE);
+                } else {
+                    _info.set_state(check_info_cls::DONGLE, check_info_obj::STATE_NG);
+                }
+
+                // 時計の破損チェック。エラーも設定される
+                is_broken_clock: !system_core.validate_clock();
+                // (for debug)時計が壊れたことにする
+                //is_broken_clock = true;
+                //error_manager.notify_error(lib::error_manager::ERROR_21_01_CLOCK);
+                _info.set_state(check_info_cls::CLOCK, is_broken_clock?check_info_obj::STATE_NG:check_info_obj::STATE_OK);
+
+                // サウンド初期化エラー
+                if (system_core.is_sound_initialized()) {
+                    _info.set_state(check_info_cls::SOUND, check_info_obj::STATE_OK);
+                }
+                else {
+                    _info.set_state(check_info_cls::SOUND, check_info_obj::STATE_NG);
+                }
+                
+                // 時計エラーの場合はこの先のチェックを行わない
+                if(is_broken_clock){
+                    "clock error!".p;
+                    if(_text_state) {
+                        if (_com_state) {
+                            _com_state.color[0] = [1, 0, 0, 1];
+                        }
+                        _text_state.renderer.message = "CLOCK ERROR!!";
+                    }
+                    _state = STATE_WAIT;
+                    _wait_count = 60 * app_config.self_check.display_result_wait / 1000;
+                    return;
+                }
+
+                // ケーブルチェック（別に表示する必要はないのだが一応）
+                // どちらかと言うとlocal_networkの初期化前にチェックするべき
+                _is_cable_ok = system_core.check_network_cable_connection_immediately();
+                _info.set_state(check_info_cls::CABLE, _is_cable_ok?check_info_obj::STATE_OK:check_info_obj::STATE_NG);
+
+                // コンテンツルーターへのping
+                _ping_client = lib::ping_client();
+                _ping_client.initialize();
+                // 1000[ms]置きに4回チェック(ここはテストモードではないのでこの設定である必要はない）
+                _ping_client.request("127.0.0.1:0", 4, 1000); // haruMod
+            }
+            case (STATE_CHECKING) {
+                if (_stid_checker) {
+                    _stid_checker.update();
+                }
+                else if (jv_manager.is_valid() || jv_manager.is_error()) {
+                    // STID重複・ST1不在チェック開始
+                    // 
+                    // [NOTE] JV の初期化が完了していないと，station_id_checker
+                    // のコンストラクタ内で自身の station_id が正しくない値に
+                    // 上書きされてしまう
+                    _stid_checker = lib::station_id_checker();
+                    _stid_checker.initialize();
+                    _stid_checker.check(app_config.self_check.check_st_prewait_time,
+                                        app_config.self_check.check_st_wait_st1_time,
+                                        app_config.self_check.enable_check_st,
+                                        true);  // STID不正をエラーにする
+
+                    // 自身の STATION ID 表示を更新
+                    stid: game_setting.station_id();
+                    stid_str: %f"%d%s"(1+stid/2, (stid % 2)==0?"L":"R");
+                    _info.set_msg(check_info_cls::STID, stid_str, check_info_obj::COLOR_WHITE);
+                }
+                
+                update_last_auth();
+                update_gs();
+                update_display();
+
+                // 全てのチェックが完了したら進む
+                if (_info.is_checked()) {
+                    "self check end.".p;
+                    if(_text_state) {
+                        if (_com_state) {
+                            _com_state.color[1] = [1, 1, 1, 1];
+                        }
+                        _text_state.renderer.message = "SYSTEM CHECK COMPLETE.";
+                    }
+                    _state = STATE_WAIT;
+                    _wait_count = 60 * app_config.self_check.display_result_wait / 1000;
+
+                    // 常駐マネージャー系以外のエラーをここで設定する
+
+                    // コンテンツルーターからIPが取得できていない
+                    // todo: 将来的に local_network 内でコンテンツルーター配下にいることの
+                    // チェックをするようになったら判定を置き換えてください
+                    if(!_is_cable_ok || !system_core.local_network.is_connected()){
+                        if (!app_config.config.enable_force_offline_mode) {
+                            if(!error_manager.is_notified(lib::error_manager::ERROR_25_01_NETWORK)){
+                                error_manager.notify_error(lib::error_manager::ERROR_25_01_NETWORK);
+                            }
+                        }
+                    }
+
+                    // コンテンツルーターに繋がらない
+                    if (!_ping_client.is_succeed()) {
+                        if (!app_config.config.enable_force_offline_mode) {
+                            if(!error_manager.is_notified(lib::error_manager::ERROR_25_03_NETWORK)){
+                                error_manager.notify_error(lib::error_manager::ERROR_25_03_NETWORK);
+                            }
+                        }
+                    }
+                    _ping_client.finalize();
+                }
+            }
+            case (STATE_WAIT) {
+                --_wait_count;
+                if (_wait_count <= 0) {
+                    "wait end.".p;
+                    _touch_refresh = this.owner.add_component(touch_panel_refresh);
+                    _state = STATE_TOUCH_PANEL_REFRESH;
+                }
+            }
+            case (STATE_TOUCH_PANEL_REFRESH) {
+                if (_touch_refresh.?is_completed()) {
+                    _touch_refresh.destroy();
+                    _touch_refresh = null;
+                    _state = STATE_END;
+                }
+            }
+            case (STATE_DEBUG_INIT_MACHINE_SETTING) {
+                _server_contents.update();
+            }
+        }
+    }
+    
+    update_gs: method() {
+        switch (_state_gs) {
+            case (GS_STATE_WAIT_AUTH) {
+                // 最終認証中にgsの初期化が入るので、結果が出るまで待つ
+                if(_state_auth != AUTH_STATE_INIT && _state_auth != AUTH_STATE_WAIT){
+                    // ALL.Net認証していれば課金系が通ってなくてもチェック開始
+                    // （オフライン稼働の場合にチェックもしない場合は AUTH_STATE_OK の時のみ通す）
+                    if (amauth.is_allnet_auth_ok()) {
+                        "heart_beat start.".p;
+                        start_result: heart_beat_checker.start_check();
+                        if(!start_result){
+                            "heart_beat start_check failed.".p;
+                            _info.set_state(check_info_cls::GS, check_info_obj::STATE_NG);
+                            _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                            _state_gs = GS_STATE_END;
+                        }else{
+                            "heart_beat start_check ok.".p;
+                            _state_gs = GS_STATE_WAIT;
+                        }
+                    }else{
+                        "heart_beat skipped.".p;
+                        _info.set_state(check_info_cls::GS, check_info_obj::STATE_NG);
+                        _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                        _state_gs = GS_STATE_END;
+                    }
+                }
+            }
+            case (GS_STATE_WAIT) {
+                hb_state: heart_beat_checker.state();
+                if (hb_state == lib::gameserver_action::OK) {
+                    "heart_beat result ok.".p;
+                    response: heart_beat_checker.last_response();
+                    if(response){
+                        %f"heart_beat response result:%d"(response.result).p;
+                        switch (response.result) {
+                            case (1) {
+                                // まもなくメンテナンスの時もNGになるので、表示の細分化をする必要があればここで
+                                _info.set_state(check_info_cls::GS, 
+                                                (response.game_svr_stat == 1) ? check_info_obj::STATE_OK : check_info_obj::STATE_NG);
+                                _info.set_state(check_info_cls::CARD_SERVER, 
+                                                (response.com_svr_stat == 1) ? check_info_obj::STATE_OK : check_info_obj::STATE_NG);
+                            }
+                            case (1001) {   // HeartBeatで共通IDサーバ異常
+                                // まもなくメンテナンスの時もNGになるので、表示の細分化をする必要があればここで
+                                _info.set_state(check_info_cls::GS, 
+                                                (response.game_svr_stat == 1) ? check_info_obj::STATE_OK : check_info_obj::STATE_NG);
+                                _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                            }
+                            default {
+                                _info.set_state(check_info_cls::GS, check_info_obj::STATE_NG);
+                                _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                            }
+                        }
+                    }else{
+                        "heart_beat result ok, but response is null.".p;
+                        _info.set_state(check_info_cls::GS, check_info_obj::STATE_NG);
+                        _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                    }
+                    _state_gs = GS_STATE_END;
+                }
+                else if (hb_state == lib::gameserver_action::NG || hb_state == lib::gameserver_action::ERROR) {
+                    "heart_beat failed.".p;
+                    _info.set_state(check_info_cls::GS, check_info_obj::STATE_NG);
+                    _info.set_state(check_info_cls::CARD_SERVER, check_info_obj::STATE_NG);
+                    _state_gs = GS_STATE_END;
+                }
+            }
+        }
+    }
+    
+    update_last_auth: method() {
+        switch (_state_auth) {
+            // 認証の状態をチェックする
+            case (AUTH_STATE_INIT) {
+                "update last auth start.".p;
+                check_result: last_auth_checker.check(true, false);
+                if (!check_result) {
+                    "last auth check failed.".p;
+                    _state_auth = AUTH_STATE_ERROR;
+                }
+                else {
+                    _state_auth = AUTH_STATE_WAIT;
+                }
+            }
+            // 認証実行待ち
+            case (AUTH_STATE_WAIT) {
+                if(!last_auth_checker.is_checking()){
+                    %f"last auth check end. auth:%d result:%d error:%d"(last_auth_checker.auth_state(), last_auth_checker.result(), last_auth_checker.error()).p;
+                    switch(last_auth_checker.auth_state()) {
+                        case (lib::last_auth_checker::AUTH_STATE_OK)        { _state_auth = AUTH_STATE_OK; }
+                        case (lib::last_auth_checker::AUTH_STATE_OFFLINE)   { _state_auth = AUTH_STATE_OFFLINE_OK; }
+                        case (lib::last_auth_checker::AUTH_STATE_NG)        { _state_auth = AUTH_STATE_ERROR; }
+                        default                                             { _state_auth = AUTH_STATE_ERROR; }
+                    }
+                }
+            }
+            // 最終認証OK
+            case (AUTH_STATE_OK) {}
+            // オフライン稼働してOK
+            case (AUTH_STATE_OFFLINE_OK) {}
+            // エラーが起きたのでこのあとエラー画面に遷移する
+            case (AUTH_STATE_ERROR) {}
+        }
+    }
+
+    update_display: method() {
+        // JV
+        if(jv_manager.is_valid())       { _info.set_state(check_info_cls::JVIO, check_info_obj::STATE_OK); }
+        else if(jv_manager.is_error())  { _info.set_state(check_info_cls::JVIO, check_info_obj::STATE_NG); }
+
+        // CARD READER
+        // （リセット処理中もOK表示になるが…）
+        if(card_reader.is_error())      { _info.set_state(check_info_cls::CARD, check_info_obj::STATE_NG); }
+        else                            { _info.set_state(check_info_cls::CARD, check_info_obj::STATE_OK); }
+
+        // コンテンツルーターへのping
+        if(!_ping_client.is_checking()) {
+            _info.set_state(check_info_cls::ROUTER,
+                _ping_client.is_succeed() ? check_info_obj::STATE_OK : check_info_obj::STATE_NG);
+        }
+
+        // LAN
+        if(_is_cable_ok && system_core.local_network.is_connected()) {
+            _info.set_state(check_info_cls::LAN, check_info_obj::STATE_OK);
+        }
+        else {
+            _info.set_state(check_info_cls::LAN, check_info_obj::STATE_NG);
+        }
+
+        // ALLNET
+        if(amauth.is_allnet_auth_ok())                  { _info.set_state(check_info_cls::ALLNET, check_info_obj::STATE_OK); }
+        else                                            { _info.set_state(check_info_cls::ALLNET, check_info_obj::STATE_NG); }
+
+        // UPDATER
+        if(amauth.is_mucha_auth_ok())                   { _info.set_state(check_info_cls::UPDATER, check_info_obj::STATE_OK); }
+        else                                            { _info.set_state(check_info_cls::UPDATER, check_info_obj::STATE_NG); }
+
+        // GAMESERVER & CARD SERVERは update_gs の中でセット
+
+        // 最終認証=課金・ブックキーピング送信・情報取得が完了しオンライン稼働できるか
+        switch(_state_auth){
+            case (AUTH_STATE_OK)            { _info.set_state(check_info_cls::LAST_AUTH, check_info_obj::STATE_OK); }
+            case (AUTH_STATE_OFFLINE_OK)    { _info.set_msg(check_info_cls::LAST_AUTH, "OFFLINE", check_info_obj::COLOR_WARNING); }
+            case (AUTH_STATE_ERROR)         { _info.set_state(check_info_cls::LAST_AUTH, check_info_obj::STATE_NG); }
+        }
+
+        // 初回認証がとれているか
+        if (machine_setting.place_id().length() > 0) {
+            _info.set_state(check_info_cls::FIRST_AUTH, check_info_obj::STATE_OK);
+        }
+        // 最終認証チェックが終わっていて所定のデータがないなら初回認証はNG
+        else if(_state_auth < 0 || _state_auth > AUTH_STATE_WAIT) {
+            _info.set_state(check_info_cls::FIRST_AUTH, check_info_obj::STATE_NG);
+        }
+
+        // STATION ID の重複チェック、1L存在チェック
+        if (_stid_checker) {
+            if (_stid_checker.state() == lib::station_id_checker::STATE_OK) {
+                _info.set_state(check_info_cls::STID_UNIQUE, check_info_obj::STATE_OK);
+                _info.set_state(check_info_cls::STID_1L, check_info_obj::STATE_OK);
+            }
+            else if (_stid_checker.state() == lib::station_id_checker::STATE_NG) {
+                _info.set_state(check_info_cls::STID_UNIQUE, _stid_checker.is_overlapped() ? check_info_obj::STATE_NG : check_info_obj::STATE_OK);
+                _info.set_state(check_info_cls::STID_1L, _stid_checker.is_exist_st1() ? check_info_obj::STATE_OK : check_info_obj::STATE_NG);
+            }
+        }
+    }
+
+    setup_sound: method() {
+        "setup_sound.".p;
+        // 常駐のサウンドバンクをロード
+        sound_bank_manager.load("sound/COMMON.nus3bank");
+        // 音量を反映（テストモード → アトラクト）
+        system_core.game_volume_enabled(false);
+		jv_manager.end_self_check();
+    }
+
+}
