@@ -24,6 +24,7 @@ Misc. Notes:
 
 Default keybindings:
 * Touchscreen: Everything
+* Backspace: Scan Card
 * 1: TEST
 * 2: SERVICE
 * 3: COIN / Test Menu ENTER
