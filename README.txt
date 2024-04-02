@@ -14,6 +14,8 @@ Edit AMCUS\AMConfig.ini and change the server URL (cacfg-auth_server_url) and th
 Edit app\DEVICE\banapass.txt to your banapass ID.
 Use Launch.bat to start the game.
 
+If you crash with "[ERROR] (network::local_network::initialize) initialize error: bind", run "net stop winnat" as admin.
+
 ---
 
 Development:
