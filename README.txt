@@ -4,4 +4,10 @@ Scripts for various games on the ESx series of cabinets to add modifications/seg
 
 ---
 
-Requires hexedit.exe (https://github.com/akechi-haruka/hexedit-cmd) in the utils directory!
+Installation:
+
+Synchronica:
+Download all files and place them in the main game directory (where init.ps1 is)
+Download hexedit.exe (https://github.com/akechi-haruka/hexedit-cmd) and place it in the utils directory!
+
+Use Launch.bat to start the game.
