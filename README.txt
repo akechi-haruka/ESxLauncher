@@ -2,6 +2,8 @@ ESx Launchscripts
 
 Scripts for various games on the ESx series of cabinets to add modifications/segatools or run on other machines.
 
+The source for the segatools build I use can be found here: https://github.com/akechi-haruka/segatools
+
 --- Synchronica ---
 
 Installation:
