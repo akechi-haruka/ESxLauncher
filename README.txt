@@ -16,6 +16,8 @@ Use Launch.bat to start the game.
 
 If you crash with "[ERROR] (network::local_network::initialize) initialize error: bind", run "net stop winnat" as admin.
 
+If the game passes all startup checks, but still appears offline, turn off CLOSE TIME SETTING from the test menu.
+
 Misc. Notes:
 
 * is_holiday.xtal was edited so the game doesn't crash outside of 2018
