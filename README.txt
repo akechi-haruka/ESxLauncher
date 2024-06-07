@@ -22,6 +22,7 @@ Misc. Notes:
 
 * is_holiday.xtal was edited so the game doesn't crash outside of 2018
 * self_check.xtal was edited so the game doesn't attempt to ping a hardcoded store router address causing a network error (game still works, however an ugly "NETWORK ERROR" message is displayed on the bottom.
+* musicinfo/musicinfo_aou.xtal were edited to remove expiration dates and reset unlock states to the last online version.
 * To change side for multiplayer, edit "side" to L/R in segatools.ini
 
 Default keybindings:
