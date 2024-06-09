@@ -28,12 +28,23 @@ rem if "%PAUSE_BEFORE_EXIT%" == "1" pause
 exit
 
 :check_oas_updater
-if "%IS_FROM_OAS_UPDATER%" == "1" goto amauth
-if "%OAS_UPDATER_DISABLED%" == "1" goto amauth
+if "%IS_FROM_OAS_UPDATER%" == "1" goto check_dirs
+if "%OAS_UPDATER_DISABLED%" == "1" goto check_dirs
 echo [i] Checking updater...
 OASUpdaterSAO
 if "%PAUSE_BEFORE_EXIT%" == "1" pause
 exit
+
+:check_dirs
+echo [i] Checking directories...
+
+if not exist %AMCUS_DIR%\ echo [E] AMCUS_DIR not found! && goto end_exit
+if not exist %AMCUS_DIR%\AMAuthd.exe echo [E] AMAuthd.exe not found! && goto end_exit
+if not exist %AMCUS_DIR%\AMUpdater.exe echo [E] AMUpdater.exe not found! && goto end_exit
+if not exist %PREP_DIR%\ echo [E] PREP_DIR not found! && goto end_exit
+if not exist %GAME_DIR%\%GAME_EXE% echo [E] GAME_DIR/GAME_EXE not found! && goto end_exit
+
+goto amauth
 
 :amauth_restart
 echo [W] AMUpdater is requesting a restart.
@@ -78,11 +89,13 @@ taskkill /F /IM AMUpdater.exe > nul 2>&1
 taskkill /F /IM muchacd.exe > nul 2>&1
 echo [i] Registering All.Net COM dll...
 regsvr32 /s iauthdll.dll
+echo [i] Exit code: %ERRORLEVEL%
 echo [i] Launching AMAuthd...
 start /min inject -d -k %HOOK_DLL_NAME% -d AMAuthd.exe
 c:\windows\system32\timeout 2 > nul
 echo [i] Launching AMUpdater...
 inject -k %HOOK_DLL_NAME% -d AMUpdater.exe -wait -passThru > nul 2>&1
+echo [i] Exit code: %ERRORLEVEL%
 if ERRORLEVEL 1 goto amauth_restart
 
 
@@ -127,6 +140,8 @@ taskkill /F /IM muchacd.exe > nul 2>&1
 echo [i] Deleting fake drives...
 subst G: /D > nul 2>&1
 subst F: /D > nul 2>&1
+
+:end_exit
 
 if "%PAUSE_BEFORE_EXIT%" == "1" pause
 
