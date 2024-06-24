@@ -1,0 +1,80 @@
+// -*- mode: xtal; coding: utf-8 -*-
+is_same_songlist: fun(a, b) {
+    if (a.size != b.size) {
+        return false;
+    }
+    a {|id,data|
+        if (!b[id]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// haruMod start
+merge_songlist: fun(default_, custom) {
+    "merge_songlist".p;
+    "default_: %d"(default_.length).p;
+    "custom: %d"(custom.length).p;
+    merged: [:];
+    // カスタム側で曲順も入れ換えたい場合があるので，先にカスタム側を舐めて登録する
+    custom {|id, data|
+        song: data.clone();
+        song["SONG_UNLOCK"] = true; // song available (but not a full unlock)
+        merged[id] = song;
+    }
+    default_ {|id, data|
+        if (!merged[id]) {
+            song: data.clone();
+            song["SONG_UNLOCK"] = true; // song available (but not a full unlock)
+            merged[id] = song;
+        }
+    }
+    "merged: %d"(merged.length).p;
+    return merged;
+}
+// haruMod end
+
+custom_songdata_enabled: false;
+custom_songdata_file: "";
+if (app_config.custom_songdata.enable) {
+    custom_songdata_enabled = true;
+    custom_songdata_file = app_config.custom_songdata.filename;
+}
+/*if (game_setting.is_event_cup_mode() || harumod.ed.is_event_mode()) {  // haruMod
+    custom_songdata_enabled = true;
+    custom_songdata_file = "songdata_aou.xtal";
+}*/ // haruMod: well yes but actually no
+
+if (custom_songdata_enabled) {
+    default_: load("songdata_default.xtal");
+    try {
+        // 外部ファイルも指定できるように小細工
+        custom: filesystem::load_raw_xtal(custom_songdata_file);
+        // レーティング最大値の兼ね合いがあるので，登録曲が一致しているかチェックする
+        if (is_same_songlist(default_, custom)) {
+            global::SONGDATA: custom;
+        }
+        else {
+            merged: merge_songlist(default_, custom);
+            if (merged) {
+                global::SONGDATA: merged;
+            }
+            else {
+                global::SONGDATA: default_;
+            }
+        }
+    }
+    catch (e) {
+        // haruMod start
+        "Error loading custom songdata!".p;
+        e.p;
+        // haruMod end
+        global::SONGDATA: default_;
+    }
+}
+else {
+    global::SONGDATA: load("songdata_default.xtal");
+}
+
+return global::SONGDATA;
