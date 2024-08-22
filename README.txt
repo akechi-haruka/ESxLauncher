@@ -81,3 +81,31 @@ RT: accelerator
 Development:
 
 Same as installation, but also add mkhook.dll/inject.exe/security_buster.dll to both AMCUS and mariokart folders.
+
+
+--- Sword Art Online Arcade: Deep Explorer ---
+
+
+Installation:
+
+1. (Recommended) Delete all existing .bat and .ps1 files for a less messy folder.
+2. Download the ESx launcher (from Releases on the right side) for Sword Art Online AC: DE and extract everything to the game's main folder. (includes the translation and SwordArtOffline)
+ - https://github.com/akechi-haruka/SwordArtOffline
+ - https://github.com/akechi-haruka/SAOACDETranslation
+ - https://github.com/akechi-haruka/ZebraSpooler/
+3. Create a folder called nvram.
+4. Copy rominfo.xml into the notice folder.
+5. Open a command prompt in the root directory as administrator (otherwise mklink will fail) and run the following to link the modloader configuration of all three "game" executables together (so you only have to modify keybindings in one of the "games":
+
+    type NUL >> game\BepInEx\config\SwordArtOffline.cfg
+    del notice\BepInEx\config\SwordArtOffline.cfg
+    mklink /H notice\BepInEx\config\SwordArtOffline.cfg game\BepInEx\config\SwordArtOffline.cfg
+    del testmode\BepInEx\config\SwordArtOffline.cfg
+    mklink /H testmode\BepInEx\config\SwordArtOffline.cfg game\BepInEx\config\SwordArtOffline.cfg
+
+6. Edit AMCUS\segatools.ini to change the server URL and the keychip ID. 
+7. Edit AMCUS\AMConfig.ini and change the server URL (cacfg-auth_server_url) and the keychip ID (cacfg-game_board_id).
+8. Run Launch.bat to start the game.
+9. If the System Check screen starts honking at you with a camera error, press the test menu button (default: F2) to ignore and continue. (Do not do this on other errors)
+10. Press F1 ingame to open the mod settings menu, and navigate under "SwordArtOffline" to set your keybindings, change your card ID and control other settings.
+11. If you want to go into the test menu (disable close time, free play, check keybindings, etc) press the test menu button (default: F2). This will shut down the main game and launch the test menu "game".
