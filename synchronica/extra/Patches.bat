@@ -6,6 +6,7 @@ util\hexedit app\sync_release.exe app\sync_release.exe 0x009D69AC 0x6C,0x6F,0x63
 
 rem jst maintenance time bypass
 util\hexedit app\sync_release.exe app\sync_release.exe 0x000CF79B 0xEB 0x74
+util\hexedit app\sync_release.exe app\sync_release.exe 0x00174D2B 0xEB 0x74
 
 rem harumod settings label in test menu
 if exist data\scene\testmode_update\testmode_update.xtal goto testmenu_hexedit_harumod_yes
